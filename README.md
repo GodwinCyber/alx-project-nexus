@@ -62,6 +62,11 @@ This repository will continue to evolve as I learn more. Contributions, suggesti
 
 ---
 
+---
+## Entity Relationship (ER) Diagram
+The ER diagram [link](https://dbdiagram.io/d/6913e0f36735e1117059c3d4)
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License.
