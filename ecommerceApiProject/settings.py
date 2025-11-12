@@ -25,6 +25,8 @@ SECRET_KEY = 'django-insecure-t@(27u7fm@scg0zw#)@xu0z457ih14=aieyxfu8n$wo*nsv&_d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+AUTH_USER_MODEL = 'ecommerce.Customer'
+
 ALLOWED_HOSTS = []
 
 
@@ -37,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'graphene_django',
 
     # local app
     'ecommerce',
@@ -123,3 +126,8 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+GRAPHENE = {
+    "SCHEMA": "ecommerceApiProject.schema.schema"
+}
