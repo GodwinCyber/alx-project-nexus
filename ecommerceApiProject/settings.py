@@ -25,7 +25,13 @@ SECRET_KEY = 'django-insecure-t@(27u7fm@scg0zw#)@xu0z457ih14=aieyxfu8n$wo*nsv&_d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-AUTH_USER_MODEL = 'ecommerce.User'
+AUTH_USER_MODEL = "ecommerce.User"
+
+REST_FRAMEWORK ={
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
 
 ALLOWED_HOSTS = []
 
