@@ -3,6 +3,10 @@ from graphene_django import DjangoObjectType
 from .models import User, Category, SubCategory, Product, ProductImage
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
+from graphene.types.decimal import Decimal
+from graphene_django.filter import DjangoFilterConnectionField
+from django.contrib.auth.decorators import login_required
+from .filter import ProductFilter, CategoryFilter, SubCategoryFilter, ProductImageFilter
 
 # ==========================
 # GraphQL Object Types
@@ -17,24 +21,32 @@ class CategoryType(DjangoObjectType):
     '''GraphQL type for the Category model'''
     class Meta:
         model = Category
+        filterset_class = CategoryFilter
+        interfaces = (graphene.relay.Node,)
         fields = ('id', 'name')
 
 class SubCategoryType(DjangoObjectType):
     '''GraphQL type for the SubCategory model'''
     class Meta:
         model = SubCategory
+        filterset_class = SubCategoryFilter
+        interfaces = (graphene.relay.Node,)
         fields = ('id', 'name', 'category')
 
 class ProductType(DjangoObjectType):
     '''GraphQL type for the Product model'''
     class Meta:
         model = Product
+        filterset_class = ProductFilter
+        interfaces = (graphene.relay.Node,)
         fields = ('id', 'name', 'category', 'sub_category', 'description', 'price', 'amount_in_stock', 'created_at', 'updated_at')
 
 class ProductImageType(DjangoObjectType):
     '''GraphQL type for the ProductImage model'''
     class Meta:
         model = ProductImage
+        filterset_class = ProductImageFilter
+        interfaces = (graphene.relay.Node,)
         fields = ('id', 'product', 'image')
 
 # ==========================
@@ -61,7 +73,7 @@ class ProductInput(graphene.InputObjectType):
     category_id = graphene.Int(required=True)
     sub_category_id = graphene.Int()
     description = graphene.String()
-    price = graphene.Float(required=True)
+    price = graphene.Decimal(required=True)
     amount_in_stock = graphene.Int(required=True)
 
 class ProductImageInput(graphene.InputObjectType):
@@ -69,6 +81,29 @@ class ProductImageInput(graphene.InputObjectType):
     product_id = graphene.Int(required=True)
     image = graphene.String(required=True)  # Assuming image is provided as a base64 string or URL
 
+
+# =========================
+# GraphQL filter inputs
+# ===============
+class CategoryFilterInput(graphene.InputObjectType):
+    '''Input type for filtering categories'''
+    name = graphene.String()
+
+class SubCategoryFilterInput(graphene.InputObjectType):
+    '''Input type for filtering sub-categorys'''
+    name = graphene.String()
+    category = graphene.Int()
+
+class ProductFilterInput(graphene.InputObjectType):
+    '''Input type for filtering products'''
+    name = graphene.String()
+    category = graphene.Int()
+    subcategory = graphene.Int()
+    price__gte = graphene.Decimal()
+    price__lte = graphene.Decimal()
+    stock__gte = graphene.Int()
+    stock__lte = graphene.Int()
+    low_stock = graphene.Boolean()
 
 
 # ==========================
@@ -359,8 +394,8 @@ class CreateProductImage(graphene.Mutation):
     class Arguments:
         input = ProductImageInput(required=True)
         
-        product_image = graphene.Field(ProductImageType)
-        ok = graphene.Boolean()
+    product_image = graphene.Field(ProductImageType)
+    ok = graphene.Boolean()
 
     @staticmethod
     def mutate(root, info, input):
@@ -378,7 +413,7 @@ class CreateProductImage(graphene.Mutation):
         return CreateProductImage(product_image=product_image, ok=True)
 
 
-class DeleteProductImage(graphene.Mutation):
+class DeleteProductImageById(graphene.Mutation):
     '''Mutation to delete an existing product image'''
     class Arguments:
         id = graphene.Int(required=True)
@@ -394,7 +429,7 @@ class DeleteProductImage(graphene.Mutation):
             raise Exception("Product image does not exist.")
 
         product_image.delete()
-        return DeleteProductImage(ok=True)
+        return DeleteProductImageById(ok=True)
 
 # ==========================
 # GraphQL Queries and resolvers
@@ -402,6 +437,52 @@ class DeleteProductImage(graphene.Mutation):
 class Query(graphene.ObjectType):
     '''GraphQl Query to fetch user'''
     user = graphene.Field(UserType, id=graphene.Int(required=True))
+    all_categories = DjangoFilterConnectionField(CategoryType)
+    all_sub_categories = DjangoFilterConnectionField(SubCategoryType)
+    all_products = DjangoFilterConnectionField(ProductType)
+    product_by_id = DjangoFilterConnectionField(
+        ProductType,
+        id=graphene.Int(required=True),
+    )
+    product_by_category = DjangoFilterConnectionField(
+        ProductType,
+        category_id=graphene.Int(required=True),
+    )
+    product_by_sub_category = DjangoFilterConnectionField(
+        ProductType,
+        sub_category_id=graphene.Int(required=True),
+    )
+    products = graphene.List(
+        ProductType,
+        filter=ProductFilterInput(required=False),
+    )
+    category = graphene.Field(
+        CategoryType,
+        id=graphene.Int(required=True),
+    )
+    sub_category = graphene.Field(
+        SubCategoryType,
+        id=graphene.Int(required=True),
+    )
+
+    # Search queries can be added here
+    search_products = graphene.List(
+        ProductType,
+        name=graphene.String(required=True),
+    )
+    product_by_price_range = graphene.List(
+        ProductType,
+        price__gte=graphene.Decimal(required=True),
+        price__lte=graphene.Decimal(required=True),
+    )
+    search_categories = graphene.List(
+        CategoryType,
+        name=graphene.String(required=True),
+    )
+    search_sub_categories = graphene.List(
+        SubCategoryType,
+        name=graphene.String(required=True),
+    )
 
     def resolve_user(self, info, id):
         '''Resolver to felch a user by ID'''
@@ -415,9 +496,12 @@ class Query(graphene.ObjectType):
             return User.objects.get(pk=id)
         except User.DoesNotExist:
             return None
-        
+    
+    @login_required
+    def resolve_products(self, info, filters=None):
+        '''Resolver to fetch products with optional filtering'''
+        return Product.objects.get(id=id)
 
-        
 class Mutation(graphene.ObjectType):
     '''Root Schema for mutations'''
     create_user = CreateUser.Field()
@@ -435,7 +519,7 @@ class Mutation(graphene.ObjectType):
     delete_product = DeleteProduct.Field()
 
     create_product_image = CreateProductImage.Field()
-    delete_product_image = DeleteProductImage.Field()
+    delete_product_image = DeleteProductImageById.Field()
 
 schema = graphene.Schema(
     query=Query,
