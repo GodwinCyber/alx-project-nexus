@@ -87,10 +87,24 @@ class CartItem(models.Model):
     
 class Order(models.Model):
     '''Represent a customer order'''
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='orders')
-    order_from = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_ordered')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     status = models.CharField(max_length=10, default='created', choices=ORDER_STATUS_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Order #{self.id} by {self.user.email} - {self.status.upper( )}"
+
+class OrderItem(models.Model):
+    '''Many-to-Many link between Order and Product'''
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        unique_together = ('order', 'product')
+
+    def __str__(self):
+        return f"{self.product.name} x {self.quantity} in order #{self.order.id}"
 
 
 class Rating(models.Model):
