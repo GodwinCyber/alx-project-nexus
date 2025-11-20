@@ -68,15 +68,15 @@ class ProductImage(models.Model):
     
 class Cart(models.Model):
     '''Represnt a shopping carrt belonging to a user'''
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='carts')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='cart')
 
     def __str__(self):
         return f"Cart for {self.user.email}"
 
-class CartProduct(models.Model):
+class CartItem(models.Model):
     '''Many-to-Many link between Cart and Product'''
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='cart_items')
     quantity = models.PositiveIntegerField(default=1)
 
     class Meta:
