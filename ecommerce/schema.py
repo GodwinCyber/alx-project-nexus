@@ -1,12 +1,31 @@
+from email.mime import image
 import graphene
 from graphene_django import DjangoObjectType
-from .models import User, Category, SubCategory, Product, ProductImage
+from .models import (
+    User,
+    Category,
+    SubCategory,
+    Product,
+    ProductImage,
+    Cart,
+    CartItem,
+    Order,
+    OrderItem,
+)
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from graphene.types.decimal import Decimal
 from graphene_django.filter import DjangoFilterConnectionField
-from django.contrib.auth.decorators import login_required
-from .filter import ProductFilter, CategoryFilter, SubCategoryFilter, ProductImageFilter
+from .filter import (
+    CategoryFilter,
+    SubCategoryFilter,
+    ProductFilter,
+    ProductImageFilter,
+    CartFilter,
+    CartItemFilter,
+    OrderFilter,
+    OrderItemFilter,
+)
 
 # ==========================
 # GraphQL Object Types
@@ -49,6 +68,37 @@ class ProductImageType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         fields = ('id', 'product', 'image')
 
+class CartType(DjangoObjectType):
+    '''GraphQL type for Cart model'''
+    class Meta:
+        model = Cart
+        filterset_class = CartFilter
+        fields = ('id', 'user')
+
+class CartItemType(DjangoObjectType):
+    '''GraphQL type for CartItem model'''
+    class Meta:
+        model = CartItem
+        filterset_class = CartItemFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'cart', 'product', 'quantity')
+
+class OrderType(DjangoObjectType):
+    '''GraphQL type for Order model'''
+    class Meta:
+        model = Order
+        filterset_class = OrderFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'user', 'status', 'created_at')
+
+class OrderItemType(DjangoObjectType):
+    '''GraphQL type for OrderItem model'''
+    class Meta:
+        model = OrderItem
+        filterset_class = OrderItemFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'order', 'product', 'quantity')
+
 # ==========================
 # GraphQl inputs
 # ==========================
@@ -81,6 +131,26 @@ class ProductImageInput(graphene.InputObjectType):
     product_id = graphene.Int(required=True)
     image = graphene.String(required=True)  # Assuming image is provided as a base64 string or URL
 
+class CartInput(graphene.InputObjectType):
+    '''Input type for creating or updating a cart'''
+    user_id = graphene.Int(required=True)
+
+class CartItemInput(graphene.InputObjectType):
+    '''Input type for creating or updating a cart item'''
+    cart_id = graphene.Int(required=True)
+    product_id = graphene.Int(required=True)
+    quantity = graphene.Int(required=True)
+
+class OrderInput(graphene.InputObjectType):
+    '''Input type for creating or updating an order'''
+    user_id = graphene.Int(required=True)
+    status = graphene.String(required=True)
+
+class OrderItemInput(graphene.InputObjectType):
+    '''Input type for creating or updating an order item'''
+    order_id = graphene.Int(required=True)
+    product_id = graphene.Int(required=True)
+    quantity = graphene.Int(required=True)
 
 # =========================
 # GraphQL filter inputs
@@ -105,6 +175,34 @@ class ProductFilterInput(graphene.InputObjectType):
     stock__lte = graphene.Int()
     low_stock = graphene.Boolean()
 
+class ProductImageFilterInput(graphene.InputObjectType):
+    '''Input type for filtering product images'''
+    product = graphene.Int()
+
+class CartFilterInput(graphene.InputObjectType):
+    '''Input type for filtering carts'''
+    user = graphene.Int()
+
+class CartItemFilterInput(graphene.InputObjectType):
+    '''Input type for filtering cart items'''
+    cart_id = graphene.Int()
+    product_id = graphene.Int()
+    min_quantity = graphene.Int()
+    max_quantity = graphene.Int()
+
+class OrderFilterInput(graphene.InputObjectType):
+    '''Input type for filtering orders'''
+    user_id = graphene.Int()
+    status = graphene.String()
+    created_after = graphene.DateTime()
+    created_before = graphene.DateTime()
+
+class OrderItemFilterInput(graphene.InputObjectType):
+    '''Input type for filtering order items'''
+    order_id = graphene.Int()
+    product_id = graphene.Int()
+    min_quantity = graphene.Int()
+    max_quantity = graphene.Int()
 
 # ==========================
 # GraphQL Mutations
@@ -412,7 +510,6 @@ class CreateProductImage(graphene.Mutation):
         product_image.save()
         return CreateProductImage(product_image=product_image, ok=True)
 
-
 class DeleteProductImageById(graphene.Mutation):
     '''Mutation to delete an existing product image'''
     class Arguments:
@@ -431,6 +528,158 @@ class DeleteProductImageById(graphene.Mutation):
         product_image.delete()
         return DeleteProductImageById(ok=True)
 
+class AddProductImageToProduct(graphene.Mutation):
+    '''Mutation to add a product image to a product'''
+    class Arguments:
+        input = ProductImageInput(required=True)
+
+    product_image = graphene.Field(ProductImageType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, input):
+        '''Add a product image to a product'''
+        try:
+            product = Product.objects.get(pk=input.product_id)
+        except Product.DoesNotExist:
+            raise Exception("Product does not exist.")
+
+        product_image = ProductImage(
+            product=product,
+            image=image
+        )
+        product_image.save()
+        return AddProductImageToProduct(product_image=product_image, ok=True)
+    
+class AddToCart(graphene.Mutation):
+    '''Mutation to add a product to a user's cart'''
+    class Arguments:
+        input = CartItemInput(required=True)
+
+    cart_item = graphene.Field(CartItemType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, input):
+        '''Add a product to a user's cart'''
+        user = info.context.user # Get the authenticated user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+        
+        cart, created = Cart.objects.get_or_create(user=user)
+        try:
+            # cart_item = CartItem.objects.create(cart=cart, product__id=input.product_id)
+            # cart_item.quantity += input.quantity
+            # cart_item.save()
+            product = Product.objects.get(pk=input.product_id)
+        except Product.DoesNotExist:
+            raise Exception("Product does not exist.")
+        
+        cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+        if not created:
+            cart_item.quantity += input.quantity
+        else:
+            cart_item.quantity = input.quantity
+        cart_item.save()
+        
+        return AddToCart(cart_item=cart_item, ok=True)
+
+class UpdateCartItem(graphene.Mutation):
+    '''Mutation to update the quantity of a cart item'''
+    class Arguments:
+        id = graphene.Int(required=True)
+        quantity = graphene.Int(required=True)
+
+    cart_item = graphene.Field(CartItemType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, id, quantity):
+        '''Update the quantity of a cart item'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+
+        cart, created = Cart.objects.get_or_create(user=user)
+        try:
+            cart_item = CartItem.objects.get(pk=id, cart=cart)
+        except CartItem.DoesNotExist:
+            raise Exception("Cart item does not exist.")
+
+        cart_item.quantity = quantity
+        cart_item.save()
+        return UpdateCartItem(cart_item=cart_item, ok=True)
+ 
+class RemoveCartItem(graphene.Mutation):
+    '''Mutation to remove a cart item'''
+    class Arguments:
+        id = graphene.Int(required=True)
+
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, id):
+        '''Remove a cart item'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+
+        try:
+            cart_item = CartItem.objects.get(pk=id, cart__user=user)
+        except CartItem.DoesNotExist:
+            raise Exception("Cart item does not exist.")
+
+        cart_item.delete()
+        return RemoveCartItem(ok=True)
+
+class CreateOrder(graphene.Mutation):
+    '''Mutation to create a new order'''
+    class Arguments:
+        status = graphene.String(required=True) # e.g., 'created', 'shipped', etc.
+    order = graphene.Field(OrderType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, status='created'):
+        '''Create a new order with the provided input data'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+
+        # fetch user cart
+        try:
+            cart = Cart.objects.get(user=user)
+        except Cart.DoesNotExist:
+            raise Exception("Cart does not exist.")
+        
+        if not cart or not cart.cart_items.exists():
+            raise Exception("Cart is empty.")
+        
+        order = Order(
+            user=user,
+            status=status
+        )
+        order.save()
+
+        for item in cart.cart_items.all():
+            OrderItem.objects.create(
+                order=order,
+                product=item.product,
+                quantity=item.quantity,
+            )
+        order.save()
+
+        # clear user cart
+        cart.cart_items.all().delete()
+        return CreateOrder(order=order, ok=True)
+
+
 # ==========================
 # GraphQL Queries and resolvers
 # ==========================
@@ -440,7 +689,7 @@ class Query(graphene.ObjectType):
     all_categories = DjangoFilterConnectionField(CategoryType)
     all_sub_categories = DjangoFilterConnectionField(SubCategoryType)
     all_products = DjangoFilterConnectionField(ProductType)
-    product_by_id = DjangoFilterConnectionField(
+    product_by_id = graphene.Field(
         ProductType,
         id=graphene.Int(required=True),
     )
@@ -484,6 +733,24 @@ class Query(graphene.ObjectType):
         name=graphene.String(required=True),
     )
 
+    cart = graphene.Field(CartType)
+    cart_items = DjangoFilterConnectionField(CartItemType)
+    all_cart_items = DjangoFilterConnectionField(CartItemType)
+
+    orders = DjangoFilterConnectionField(OrderType)
+    order_items = DjangoFilterConnectionField(OrderItemType)
+
+    def resolve_product_by_id(self, info, id):
+        '''Resolver to fetch a product by ID'''
+        try:
+            return Product.objects.filter(pk=id)
+        except Product.DoesNotExist:
+            return None
+        
+    def resolve_all_products(self, info, **kwargs):
+        '''Resolver to fetch all products with optional filtering'''
+        return Product.objects.all()
+    
     def resolve_user(self, info, id):
         '''Resolver to felch a user by ID'''
         user = info.context.user
@@ -497,7 +764,6 @@ class Query(graphene.ObjectType):
         except User.DoesNotExist:
             return None
     
-    @login_required
     def resolve_products(self, info, filters=None):
         '''Resolver to fetch products with optional filtering'''
         return Product.objects.get(id=id)
@@ -520,6 +786,13 @@ class Mutation(graphene.ObjectType):
 
     create_product_image = CreateProductImage.Field()
     delete_product_image = DeleteProductImageById.Field()
+    add_product_image_to_product = AddProductImageToProduct.Field()
+
+    add_to_cart = AddToCart.Field()
+    update_cart_item = UpdateCartItem.Field()
+    remove_cart_item = RemoveCartItem.Field()
+
+    create_order = CreateOrder.Field()
 
 schema = graphene.Schema(
     query=Query,

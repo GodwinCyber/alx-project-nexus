@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+#from ecommerce.middleware import JWTGrapQLMiddleware
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,6 +50,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',
+    'graphql_playground',
 
     # local app
     'ecommerce',
@@ -138,5 +140,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 GRAPHENE = {
-    "SCHEMA": "ecommerceApiProject.schema.schema"
+    "SCHEMA": "ecommerceApiProject.schema.schema",
+    "MIDDLEWARE": [
+        "ecommerce.middleware.JWTGrapQLMiddleware",
+    ],
 }
+

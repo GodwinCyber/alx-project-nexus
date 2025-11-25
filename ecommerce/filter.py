@@ -1,5 +1,14 @@
 import django_filters
-from .models import Product, Category, SubCategory, ProductImage
+from .models import (
+    Category,
+    SubCategory,
+    Product,
+    ProductImage,
+    Cart,
+    CartItem,
+    Order,
+    OrderItem,
+) 
 
 
 class CategoryFilter(django_filters.FilterSet):
@@ -49,4 +58,50 @@ class ProductImageFilter(django_filters.FilterSet):
     class Meta:
         model = ProductImage
         fields = ['product']
+
+class CartFilter(django_filters.FilterSet):
+    '''Filter for Cart model'''
+    user = django_filters.NumberFilter(field_name='user__id')
+
+    class Meta:
+        model = Cart
+        fields = ['user']
+
+class CartItemFilter(django_filters.FilterSet):
+    '''Filter for CartItem model'''
+    cart_id = django_filters.NumberFilter(field_name='cart__id')
+    product_id = django_filters.NumberFilter(field_name='product__id')
+    min_quantity = django_filters.NumberFilter(field_name='quantity', lookup_expr='gte')
+    max_quantity = django_filters.NumberFilter(field_name='quantity', lookup_expr='lte')
+
+    class Meta:
+        model = CartItem
+        fields = ['cart_id', 'product_id', 'min_quantity', 'max_quantity']
+
+class OrderFilter(django_filters.FilterSet):
+    '''Filter for Order model'''
+    user_id = django_filters.NumberFilter(field_name='user__id')
+    status = django_filters.CharFilter(field_name='status', lookup_expr='iexact')
+    created_after = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='gte')
+    created_before = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='lte')
+
+    class Meta:
+        model = Order
+        fields = ['user_id', 'status', 'created_after', 'created_before']
+
+class OrderItemFilter(django_filters.FilterSet):
+    '''Filter for OrderItem model'''
+    order_id = django_filters.NumberFilter(field_name='order__id')
+    product_id = django_filters.NumberFilter(field_name='product__id')
+    min_quantity = django_filters.NumberFilter(field_name='quantity', lookup_expr='gte')
+    max_quantity = django_filters.NumberFilter(field_name='quantity', lookup_expr='lte')
+
+    class Meta:
+        model = OrderItem
+        fields = ['order_id', 'product_id', 'min_quantity', 'max_quantity']
+
+
+
+
+
 
