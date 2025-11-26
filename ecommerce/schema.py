@@ -11,6 +11,9 @@ from .models import (
     CartItem,
     Order,
     OrderItem,
+    Rating,
+    Payment,
+    Comment,
 )
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -25,7 +28,11 @@ from .filter import (
     CartItemFilter,
     OrderFilter,
     OrderItemFilter,
+    RatingFilter,
+    CommentFilter,
+    PaymentFilter,
 )
+import stripe
 
 # ==========================
 # GraphQL Object Types
@@ -99,6 +106,31 @@ class OrderItemType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         fields = ('id', 'order', 'product', 'quantity')
 
+class RatingType(DjangoObjectType):
+    '''GrapghQL type for Rating model'''
+    class Meta:
+        model = Rating
+        filterset_class = RatingFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'product', 'rating_from', 'stars', 'comment')
+
+class CommentType(DjangoObjectType):
+    '''GraphQL type for Comment model'''
+    class Meta:
+        model = Comment
+        filterset_class = CommentFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'product', 'comment_from', 'body')
+
+class PaymentType(DjangoObjectType):
+    '''GraphQL type for Payment model'''
+    class Meta:
+        model = Payment
+        filterset_class = PaymentFilter
+        interfaces = (graphene.relay.Node,)
+        fields = ('id', 'user', 'order', 'stripe_payment_intent', 'amount', 'currency', 'status')
+
+
 # ==========================
 # GraphQl inputs
 # ==========================
@@ -152,9 +184,31 @@ class OrderItemInput(graphene.InputObjectType):
     product_id = graphene.Int(required=True)
     quantity = graphene.Int(required=True)
 
+class RatingInput(graphene.InputObjectType):
+    '''Input type for creating or updating a rating'''
+    product_id = graphene.Int(required=True)
+    rating_from_id = graphene.Int(required=True)
+    stars = graphene.Int(required=True)
+    comment = graphene.String()
+
+class CommentInput(graphene.InputObjectType):
+    '''Input type for creating or updating a comment'''
+    product_id = graphene.Int(required=True)
+    comment_from_id = graphene.Int(required=True)
+    body = graphene.String(required=True)
+
+class PaymentInput(graphene.InputObjectType):
+    '''Input type for creating or updating a payment'''
+    user_id = graphene.Int(required=True)
+    order_id = graphene.Int(required=True)
+    stripe_payment_intent = graphene.String(required=True)
+    amount = graphene.Decimal(required=True)
+    currency = graphene.String(required=True)
+    status = graphene.String(required=True)
+
 # =========================
 # GraphQL filter inputs
-# ===============
+# =========================
 class CategoryFilterInput(graphene.InputObjectType):
     '''Input type for filtering categories'''
     name = graphene.String()
@@ -203,6 +257,30 @@ class OrderItemFilterInput(graphene.InputObjectType):
     product_id = graphene.Int()
     min_quantity = graphene.Int()
     max_quantity = graphene.Int()
+
+class RatingFilterInput(graphene.InputObjectType):
+    '''Input type for filtering ratings'''
+    product_id = graphene.Int()
+    user_id = graphene.Int()
+    min_rating = graphene.Int()
+    max_rating = graphene.Int()
+
+class CommentFilterInput(graphene.InputObjectType):
+    '''Input type for filtering comments'''
+    product_id = graphene.Int()
+    user_id = graphene.Int()
+    created_after = graphene.DateTime()
+    created_before = graphene.DateTime()
+
+class PaymentFilterInput(graphene.InputObjectType):
+    '''Input type for filtering payments'''
+    user_id = graphene.Int()
+    order_id = graphene.Int()
+    status = graphene.String()
+    amount__gte = graphene.Decimal()
+    amount__lte = graphene.Decimal()
+    created_after = graphene.DateTime()
+    created_before = graphene.DateTime()
 
 # ==========================
 # GraphQL Mutations
@@ -679,6 +757,126 @@ class CreateOrder(graphene.Mutation):
         cart.cart_items.all().delete()
         return CreateOrder(order=order, ok=True)
 
+class CreateRating(graphene.Mutation):
+    '''Mutation to create a new rating'''
+    class Arguments:
+        input = RatingInput(required=True)
+
+    rating = graphene.Field(RatingType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, input):
+        '''Create a new rating with the provided input data'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+        try:
+            product = Product.objects.get(pk=input.product_id)
+        except Product.DoesNotExist:
+            raise Exception("Product does not exist.")
+
+        try:
+            user = User.objects.get(pk=input.rating_from_id)
+        except User.DoesNotExist:
+            raise Exception("User does not exist.")
+
+        rating = Rating(
+            product=product,
+            rating_from=user,
+            stars=input.stars,
+            comment=input.comment,
+        )
+        rating.save()
+        return CreateRating(rating=rating, ok=True)
+    
+class CreateComment(graphene.Mutation):
+    '''Mutation to create a new comment'''
+    class Arguments:
+        input = CommentInput(required=True)
+
+    comment = graphene.Field(CommentType)
+    ok = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, input):
+        '''Create a new comment with the provided input data'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+        try:
+            product = Product.objects.get(pk=input.product_id)
+        except Product.DoesNotExist:
+            raise Exception("Product does not exist.")
+
+        try:
+            user = User.objects.get(pk=input.comment_from_id)
+        except User.DoesNotExist:
+            raise Exception("User does not exist.")
+
+        comment = Comment(
+            product=product,
+            comment_from=user,
+            body=input.body,
+        )
+        comment.save()
+        return CreateComment(comment=comment, ok=True)
+
+class CreatePayment(graphene.Mutation):
+    '''Mutation responsible for creating a Stripe PaymentIntent
+    and saving the record in our Payment model'''
+    class Arguments:
+        input = PaymentInput(required=True)
+
+    payment = graphene.Field(PaymentType)
+    ok = graphene.Boolean()
+    client_secret = graphene.String() # Return client secret for frontend use
+
+    @staticmethod
+    def mutate(root, info, input):
+        '''Create a new payment with the provided input data'''
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Authentication required.")
+        if user is None:
+            raise Exception("User not found.")
+        try:
+            user = User.objects.get(pk=input.user_id)
+        except User.DoesNotExist:
+            raise Exception("User does not exist.")
+
+        try:
+            order = Order.objects.get(pk=input.order_id)
+        except Order.DoesNotExist:
+            raise Exception("Order does not exist.")
+
+        # Create Stripe PaymentIntent here
+        try:
+            intent = stripe.PaymentIntent.create(
+                amount=int(float(input.amount) * 100),  # amount in cents
+                currency=input.currency,
+                metadata={
+                    'user_id': user.id,
+                    'order_id': order.id,
+                }
+            )
+        except Exception as e:
+            raise Exception(f"Stripe PaymentIntent creation failed: {str(e)}")
+        
+        payment = Payment(
+            user=user,
+            order=order,
+            stripe_payment_intent=intent["id"],
+            amount=input.amount,
+            currency=input.currency,
+            status="pending"  # initial status,
+        )
+        payment.save()
+        return CreatePayment(payment=payment, client_secret=intent["client_secret"], ok=True)
 
 # ==========================
 # GraphQL Queries and resolvers
@@ -740,6 +938,10 @@ class Query(graphene.ObjectType):
     orders = DjangoFilterConnectionField(OrderType)
     order_items = DjangoFilterConnectionField(OrderItemType)
 
+    all_ratings = DjangoFilterConnectionField(RatingType)
+    all_comments = DjangoFilterConnectionField(CommentType)
+    all_payments = DjangoFilterConnectionField(PaymentType)
+
     def resolve_product_by_id(self, info, id):
         '''Resolver to fetch a product by ID'''
         try:
@@ -791,6 +993,10 @@ class Mutation(graphene.ObjectType):
     add_to_cart = AddToCart.Field()
     update_cart_item = UpdateCartItem.Field()
     remove_cart_item = RemoveCartItem.Field()
+
+    create_rating = CreateRating.Field()
+    create_comment = CreateComment.Field()
+    create_payment = CreatePayment.Field()
 
     create_order = CreateOrder.Field()
 

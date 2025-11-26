@@ -1,6 +1,7 @@
 import django_filters
 from .models import (
     Category,
+    Rating,
     SubCategory,
     Product,
     ProductImage,
@@ -8,6 +9,8 @@ from .models import (
     CartItem,
     Order,
     OrderItem,
+    Payment,
+    Comment,
 ) 
 
 
@@ -100,6 +103,42 @@ class OrderItemFilter(django_filters.FilterSet):
         model = OrderItem
         fields = ['order_id', 'product_id', 'min_quantity', 'max_quantity']
 
+
+class RatingFilter(django_filters.FilterSet):
+    '''Filter for Rating model'''
+    product_id = django_filters.NumberFilter(field_name='product__id')
+    user_id = django_filters.NumberFilter(field_name='user__id')
+    min_rating = django_filters.NumberFilter(field_name='score', lookup_expr='gte')
+    max_rating = django_filters.NumberFilter(field_name='score', lookup_expr='lte')
+
+    class Meta:
+        model = Rating
+        fields = ['product_id', 'user_id', 'min_rating', 'max_rating']    
+
+class CommentFilter(django_filters.FilterSet):
+    '''Filter for Comment model'''
+    product_id = django_filters.NumberFilter(field_name='product__id')
+    user_id = django_filters.NumberFilter(field_name='user__id')
+    created_after = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='gte')
+    created_before = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='lte')
+
+    class Meta:
+        model = Comment
+        fields = ['product_id', 'user_id', 'created_after', 'created_before']
+
+class PaymentFilter(django_filters.FilterSet):
+    '''Filter for Payment model'''
+    user_id = django_filters.NumberFilter(field_name='user__id')
+    order_id = django_filters.NumberFilter(field_name='order__id')
+    status = django_filters.CharFilter(field_name='status', lookup_expr='iexact')
+    amount__gte = django_filters.NumberFilter(field_name='amount', lookup_expr='gte')
+    amount__lte = django_filters.NumberFilter(field_name='amount', lookup_expr='lte')
+    created_after = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='gte')
+    created_before = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='lte')
+
+    class Meta:
+        model = Payment
+        fields = ['user_id', 'order_id', 'status', 'amount__gte', 'amount__lte', 'created_after', 'created_before']
 
 
 
