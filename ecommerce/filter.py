@@ -41,7 +41,6 @@ class ProductFilter(django_filters.FilterSet):
     price__lte = django_filters.NumberFilter(field_name='price', lookup_expr='lte')
     stock__gte = django_filters.NumberFilter(field_name='amount_in_stock', lookup_expr='gte')
     stock__lte = django_filters.NumberFilter(field_name='amount_in_stock', lookup_expr='lte')
-
     low_stock = django_filters.BooleanFilter(method='filter_low_stock') 
 
     def filter_low_stock(self, queryset, name, value):
@@ -108,12 +107,12 @@ class RatingFilter(django_filters.FilterSet):
     '''Filter for Rating model'''
     product_id = django_filters.NumberFilter(field_name='product__id')
     rating_from_id = django_filters.NumberFilter(field_name='rating_from__id')
-    min_stars = django_filters.NumberFilter(field_name='stars', lookup_expr='gte')
-    max_stars = django_filters.NumberFilter(field_name='stars', lookup_expr='lte')
+    min_rating = django_filters.NumberFilter(field_name='rating', lookup_expr='gte')
+    max_rating = django_filters.NumberFilter(field_name='rating', lookup_expr='lte')
 
     class Meta:
         model = Rating
-        fields = ['product_id', 'rating_from_id', 'min_stars', 'max_stars']
+        fields = ['product_id', 'rating_from_id', 'min_rating', 'max_rating']
 
 class CommentFilter(django_filters.FilterSet):
     '''Filter for Comment model'''

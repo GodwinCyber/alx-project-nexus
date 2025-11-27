@@ -9,7 +9,6 @@ class JWTGrapQLMiddleware:
     def resolve(self, next, root, info, **kwargs):
         request = info.context
 
-        auth = JWTGrapQLMiddleware()
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if auth_header.startswith("Bearer "):
             raw_token = auth_header.split(" ")[1]

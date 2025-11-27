@@ -32,6 +32,8 @@ from .filter import (
     PaymentFilter,
 )
 import stripe
+from django.db import transaction
+from decimal import Decimal
 
 # ==========================
 # GraphQL Object Types
@@ -160,7 +162,7 @@ class ProductInput(graphene.InputObjectType):
 class ProductImageInput(graphene.InputObjectType):
     '''Input type for creating or updating a product image'''
     product_id = graphene.Int(required=True)
-    image = graphene.String(required=True)  # Assuming image is provided as a base64 string or URL
+    image = Upload(required=True)  # Use graphene-file-upload’s scalar to accept multipart file data
 
 class CartInput(graphene.InputObjectType):
     '''Input type for creating or updating a cart'''
@@ -738,22 +740,40 @@ class CreateOrder(graphene.Mutation):
         if not cart or not cart.cart_items.exists():
             raise Exception("Cart is empty.")
         
-        order = Order(
-            user=user,
-            status=status
-        )
-        order.save()
-
-        for item in cart.cart_items.all():
-            OrderItem.objects.create(
-                order=order,
-                product=item.product,
-                quantity=item.quantity,
+        with transaction.atomic():
+            # Pre-check stock availability
+            for item in cart.cart_items.all():
+                if item.product.amount_in_stock < item.quantity:
+                    raise Exception(f"Insufficient stock for product {item.product.name}.")
+            
+            order = Order(
+                user=user,
+                status=status,
+                total=Decimal('0.00')
             )
-        order.save()
+            order.save()
 
-        # clear user cart
-        cart.cart_items.all().delete()
+            order_total = Decimal('0.00')
+            for item in cart.cart_items.all():
+                # Decrement stock
+                item.product.amount_in_stock -= item.quantity
+                item.product.save()
+                
+                # Create order item
+                OrderItem.objects.create(
+                    order=order,
+                    product=item.product,
+                    quantity=item.quantity,
+                )
+                order_total += item.product.price * item.quantity
+            
+            # Save computed total
+            order.total = order_total
+            order.save()
+
+            # Clear user cart
+            cart.cart_items.all().delete()
+        
         return CreateOrder(order=order, ok=True)
 
 class CreateRating(graphene.Mutation):
@@ -770,27 +790,26 @@ class CreateRating(graphene.Mutation):
         user = info.context.user
         if user.is_anonymous:
             raise Exception("Authentication required.")
-        if user is None:
-            raise Exception("User not found.")
+
+        # Ensure the user in the token matches the user being rated-from
+        if user.id != input.rating_from_id:
+            raise Exception("You can only rate as the authenticated user.")
+
         try:
             product = Product.objects.get(pk=input.product_id)
         except Product.DoesNotExist:
             raise Exception("Product does not exist.")
 
-        try:
-            user = User.objects.get(pk=input.rating_from_id)
-        except User.DoesNotExist:
-            raise Exception("User does not exist.")
-
+        # No need to fetch the user again; we already have request_user
         rating = Rating(
             product=product,
             rating_from=user,
-            stars=input.stars,
+            rating=input.rating,
             comment=input.comment,
         )
         rating.save()
         return CreateRating(rating=rating, ok=True)
-    
+
 class CreateComment(graphene.Mutation):
     '''Mutation to create a new comment'''
     class Arguments:
@@ -807,15 +826,12 @@ class CreateComment(graphene.Mutation):
             raise Exception("Authentication required.")
         if user is None:
             raise Exception("User not found.")
+        if user.id != input.comment_from_id:
+            raise Exception("Not authorized to comment as another user.")
         try:
             product = Product.objects.get(pk=input.product_id)
         except Product.DoesNotExist:
             raise Exception("Product does not exist.")
-
-        try:
-            user = User.objects.get(pk=input.comment_from_id)
-        except User.DoesNotExist:
-            raise Exception("User does not exist.")
 
         comment = Comment(
             product=product,
@@ -843,11 +859,8 @@ class CreatePayment(graphene.Mutation):
             raise Exception("Authentication required.")
         if user is None:
             raise Exception("User not found.")
-        try:
-            user = User.objects.get(pk=input.user_id)
-        except User.DoesNotExist:
-            raise Exception("User does not exist.")
-
+        if user.id != input.user_id:
+            raise Exception("Not authorized to create payment for another user.")
         try:
             order = Order.objects.get(pk=input.order_id)
         except Order.DoesNotExist:
@@ -856,11 +869,12 @@ class CreatePayment(graphene.Mutation):
         # Create Stripe PaymentIntent here
         try:
             intent = stripe.PaymentIntent.create(
-                amount=int(float(input.amount) * 100),  # amount in cents
+                amount=int(Decimal(input.amount) * Decimal(100)).quantize(Decimal('1')),  # amount in cents
                 currency=input.currency,
                 metadata={
                     'user_id': user.id,
                     'order_id': order.id,
+                    'cart_id': cart.id,
                 }
             )
         except Exception as e:
@@ -872,7 +886,7 @@ class CreatePayment(graphene.Mutation):
             stripe_payment_intent=intent["id"],
             amount=input.amount,
             currency=input.currency,
-            status="pending"  # initial status,
+            status="processing"  # initial status,
         )
         payment.save()
         return CreatePayment(payment=payment, client_secret=intent["client_secret"], ok=True)
@@ -940,6 +954,52 @@ class Query(graphene.ObjectType):
     all_ratings = DjangoFilterConnectionField(RatingType)
     all_comments = DjangoFilterConnectionField(CommentType)
     all_payments = DjangoFilterConnectionField(PaymentType)
+
+    def resolve_products(self, info, filter=None):
+        """
+        Resolver to fetch products with optional filtering.
+        Supports:
+          - name (icontains)
+          - category (exact)
+          - subcategory (exact)
+          - price__gte / price__lte
+          - stock__gte / stock__lte
+          - low_stock (True → amount_in_stock < 10)
+        """
+        qs = Product.objects.all()
+
+        if not filter:
+            return qs
+
+        # name
+        if filter.get("name"):
+            qs = qs.filter(name__icontains=filter["name"])
+
+        # category
+        if filter.get("category"):
+            qs = qs.filter(category_id=filter["category"])
+
+        # subcategory
+        if filter.get("subcategory"):
+            qs = qs.filter(sub_category_id=filter["subcategory"])
+
+        # price range
+        if filter.get("price__gte") is not None:
+            qs = qs.filter(price__gte=filter["price__gte"])
+        if filter.get("price__lte") is not None:
+            qs = qs.filter(price__lte=filter["price__lte"])
+
+        # stock range
+        if filter.get("stock__gte") is not None:
+            qs = qs.filter(amount_in_stock__gte=filter["stock__gte"])
+        if filter.get("stock__lte") is not None:
+            qs = qs.filter(amount_in_stock__lte=filter["stock__lte"])
+
+        # low_stock flag
+        if filter.get("low_stock"):
+            qs = qs.filter(amount_in_stock__lt=10)
+
+        return qs
 
     def resolve_product_by_id(self, info, id):
         '''Resolver to fetch a product by ID'''

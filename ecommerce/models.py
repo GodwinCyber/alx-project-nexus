@@ -111,18 +111,18 @@ class Rating(models.Model):
     '''Represent product review by users'''
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='rating')
     rating_from = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ratings')
-    stars = models.PositiveSmallIntegerField()
+    rating = models.PositiveSmallIntegerField()
     comment = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.stars} - {self.product.name} by {self.rating_from.email}"
+        return f"{self.rating} - {self.product.name} by {self.rating_from.email}"
     
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=models.Q(stars__gte=1, stars__lte=5),
-                name="valid_star_range"
+                check=models.Q(rating__gte=1, rating__lte=5),
+                name="valid_rating_range"
             )
         ]
 
