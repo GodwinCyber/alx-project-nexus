@@ -1,4 +1,3 @@
-from email.mime import image
 import graphene
 from graphene_django import DjangoObjectType
 from .models import (
@@ -261,14 +260,14 @@ class OrderItemFilterInput(graphene.InputObjectType):
 class RatingFilterInput(graphene.InputObjectType):
     '''Input type for filtering ratings'''
     product_id = graphene.Int()
-    user_id = graphene.Int()
-    min_rating = graphene.Int()
-    max_rating = graphene.Int()
+    rating_from_id = graphene.Int()
+    min_stars = graphene.Int()
+    max_stars = graphene.Int()
 
 class CommentFilterInput(graphene.InputObjectType):
     '''Input type for filtering comments'''
     product_id = graphene.Int()
-    user_id = graphene.Int()
+    comment_from_id = graphene.Int()
     created_after = graphene.DateTime()
     created_before = graphene.DateTime()
 
@@ -624,7 +623,7 @@ class AddProductImageToProduct(graphene.Mutation):
 
         product_image = ProductImage(
             product=product,
-            image=image
+            image=inpu.image
         )
         product_image.save()
         return AddProductImageToProduct(product_image=product_image, ok=True)
@@ -968,7 +967,10 @@ class Query(graphene.ObjectType):
     
     def resolve_products(self, info, filters=None):
         '''Resolver to fetch products with optional filtering'''
-        return Product.objects.get(id=id)
+        #return Product.objects.get(id=id)
+        if filters:
+            return Product.objects.filter(**filters)
+        return Product.objects.all()
 
 class Mutation(graphene.ObjectType):
     '''Root Schema for mutations'''

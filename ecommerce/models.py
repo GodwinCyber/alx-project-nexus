@@ -6,11 +6,11 @@ ORDER_STATUS_CHOICES =[
     ('created', 'Created'),
     ('pending', 'Pending'),
     ('cancelled', 'Cancelled'),
-    ('deilvered', 'Delivered'),
+    ('delivered', 'Delivered'),
 ]
 
 PAYMENT_STATUS_CHOICE = [
-    ('sucessful', 'Sucessful'),
+    ('successful', 'Successful'),
     ('pending', 'Pending'),
     ('processing', 'Processing'),
     ('cancelled', 'Cancelled')

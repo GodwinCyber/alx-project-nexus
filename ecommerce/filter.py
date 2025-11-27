@@ -107,18 +107,18 @@ class OrderItemFilter(django_filters.FilterSet):
 class RatingFilter(django_filters.FilterSet):
     '''Filter for Rating model'''
     product_id = django_filters.NumberFilter(field_name='product__id')
-    user_id = django_filters.NumberFilter(field_name='user__id')
-    min_rating = django_filters.NumberFilter(field_name='score', lookup_expr='gte')
-    max_rating = django_filters.NumberFilter(field_name='score', lookup_expr='lte')
+    rating_from_id = django_filters.NumberFilter(field_name='rating_from__id')
+    min_stars = django_filters.NumberFilter(field_name='stars', lookup_expr='gte')
+    max_stars = django_filters.NumberFilter(field_name='stars', lookup_expr='lte')
 
     class Meta:
         model = Rating
-        fields = ['product_id', 'user_id', 'min_rating', 'max_rating']    
+        fields = ['product_id', 'rating_from_id', 'min_stars', 'max_stars']
 
 class CommentFilter(django_filters.FilterSet):
     '''Filter for Comment model'''
     product_id = django_filters.NumberFilter(field_name='product__id')
-    user_id = django_filters.NumberFilter(field_name='user__id')
+    comment_from_id = django_filters.NumberFilter(field_name='comment_from__id')
     created_after = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='gte')
     created_before = django_filters.DateTimeFilter(field_name='created_at', lookup_expr='lte')
 
