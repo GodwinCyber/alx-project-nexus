@@ -123,7 +123,7 @@ class CommentFilter(django_filters.FilterSet):
 
     class Meta:
         model = Comment
-        fields = ['product_id', 'user_id', 'created_after', 'created_before']
+        fields = ['product_id', 'comment_from_id', 'created_after', 'created_before']
 
 class PaymentFilter(django_filters.FilterSet):
     '''Filter for Payment model'''

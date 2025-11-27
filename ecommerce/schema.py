@@ -1,5 +1,6 @@
 import graphene
 from graphene_django import DjangoObjectType
+from graphene_file_upload.scalars import Upload
 from .models import (
     User,
     Category,
@@ -34,6 +35,7 @@ from .filter import (
 import stripe
 from django.db import transaction
 from decimal import Decimal
+from graphene_file_upload.scalars import Upload
 
 # ==========================
 # GraphQL Object Types
@@ -148,16 +150,16 @@ class CategoryInput(graphene.InputObjectType):
 class SubcategoryInput(graphene.InputObjectType):
     '''Input type for creating or updating a sub-category'''
     name = graphene.String(required=True)
-    category_id = graphene.Int(required=True)
+    categoryId = graphene.Int(required=True)
 
 class ProductInput(graphene.InputObjectType):
     '''Input type for creating or updating a product'''
     name = graphene.String(required=True)
-    category_id = graphene.Int(required=True)
-    sub_category_id = graphene.Int()
+    categoryId = graphene.Int(required=True)
+    subCategoryId = graphene.Int()
     description = graphene.String()
     price = graphene.Decimal(required=True)
-    amount_in_stock = graphene.Int(required=True)
+    amountInStock = graphene.Int(required=True)
 
 class ProductImageInput(graphene.InputObjectType):
     '''Input type for creating or updating a product image'''
@@ -326,7 +328,7 @@ class LoginUser(graphene.Mutation):
     @staticmethod
     def mutate(root, info, email, password):
         '''Authenticate user and return tokens'''
-        user = authenticate(email=email, password=password)
+        user = authenticate(username=email, password=password)
         if user is None:
             raise Exception("Invalid email or password.")
 
@@ -412,7 +414,7 @@ class CreateSubCategory(graphene.Mutation):
     def mutate(root, info, input):
         '''Create a new sub-category with the provided input data'''
         name = input.name
-        category_id = input.category_id
+        category_id = input.categoryId
 
         try:
             category = Category.objects.get(pk=category_id)
@@ -442,7 +444,7 @@ class UpdateSubCategory(graphene.Mutation):
 
         sub_category.name = input.name
         try:
-            category = Category.objects.get(pk=input.category_id)
+            category = Category.objects.get(pk=input.categoryId)
             sub_category.category = category
         except Category.DoesNotExist:
             raise Exception("Category does not exist.")
@@ -480,11 +482,11 @@ class CreateProduct(graphene.Mutation):
     def mutate(root, info, input):
         '''Create a new product with the provided input data'''
         name = input.name
-        category_id = input.category_id
-        sub_category_id = input.sub_category_id
+        category_id = input.categoryId
+        sub_category_id = input.subCategoryId
         description = input.description
         price = input.price
-        amount_in_stock = input.amount_in_stock
+        amount_in_stock = input.amountInStock
 
         try:
             category = Category.objects.get(pk=category_id)
@@ -528,14 +530,14 @@ class UpdateProduct(graphene.Mutation):
 
         product.name = input.name
         try:
-            category = Category.objects.get(pk=input.category_id)
+            category = Category.objects.get(pk=input.categoryId)
             product.category = category
         except Category.DoesNotExist:
             raise Exception("Category does not exist.")
 
-        if input.sub_category_id:
+        if input.subCategoryId:
             try:
-                sub_category = SubCategory.objects.get(pk=input.sub_category_id)
+                sub_category = SubCategory.objects.get(pk=input.subCategoryId)
                 product.sub_category = sub_category
             except SubCategory.DoesNotExist:
                 raise Exception("Sub-category does not exist.")
@@ -544,7 +546,7 @@ class UpdateProduct(graphene.Mutation):
 
         product.description = input.description
         product.price = input.price
-        product.amount_in_stock = input.amount_in_stock
+        product.amount_in_stock = input.amountInStock
         product.save()
         return UpdateProduct(product=product, ok=True)
 
@@ -625,7 +627,7 @@ class AddProductImageToProduct(graphene.Mutation):
 
         product_image = ProductImage(
             product=product,
-            image=inpu.image
+            image=input.image
         )
         product_image.save()
         return AddProductImageToProduct(product_image=product_image, ok=True)
@@ -804,7 +806,7 @@ class CreateRating(graphene.Mutation):
         rating = Rating(
             product=product,
             rating_from=user,
-            rating=input.rating,
+            rating=input.stars,
             comment=input.comment,
         )
         rating.save()

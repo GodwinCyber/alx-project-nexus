@@ -16,16 +16,24 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from graphene_django.views import GraphQLView
+from graphene_file_upload.django import FileUploadGraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from graphql_playground.views import GraphQLPlaygroundView
+from ecommerceApiProject.schema import schema
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # Playground UI (acts like Swagger)
-    path("graphql/", GraphQLPlaygroundView.as_view(endpoint="/graphql/query/")),
+    # GraphQL API
+    path(
+        "graphql/",
+        csrf_exempt(
+            FileUploadGraphQLView.as_view(schema=schema)
+        ),
+        name="graphql",
+    ),
 
-    # Actual GraphQL API endpoint
-    path("graphql/query/", csrf_exempt(GraphQLView.as_view(graphiql=True))),
+    # Playground UI (optional - for development only)
+    path("playground/", GraphQLPlaygroundView.as_view()),
 ]
+
