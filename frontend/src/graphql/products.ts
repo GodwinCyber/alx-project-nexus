@@ -1,4 +1,4 @@
-import { gql } from '@apollo/client';
+import { gql } from "@apollo/client";
 
 export const GET_ALL_PRODUCTS = gql`
   query GetAllProducts($first: Int, $after: String) {
@@ -187,11 +187,11 @@ export const CREATE_SUB_CATEGORY = gql`
 export const UPDATE_CATEGORY = gql`
   mutation UpdateCategory($id: Int!, $input: CategoryInput!) {
     updateCategory(id: $id, input: $input) {
+      ok
       category {
         id
         name
       }
-      ok
     }
   }
 `;
@@ -316,4 +316,3 @@ export const CREATE_COMMENT = gql`
     }
   }
 `;
-

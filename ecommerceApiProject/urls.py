@@ -20,20 +20,23 @@ from graphene_file_upload.django import FileUploadGraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from graphql_playground.views import GraphQLPlaygroundView
 from ecommerceApiProject.schema import schema
+from graphene_django.views import GraphQLView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     # GraphQL API
     path(
-        "graphql/",
+        "graphql-api/",
         csrf_exempt(
             FileUploadGraphQLView.as_view(schema=schema)
         ),
-        name="graphql",
+        name="graphql-api",
     ),
+    
+    path("graphql/", csrf_exempt(GraphQLView.as_view(graphiql=True))),
 
     # Playground UI (optional - for development only)
-    path("playground/", GraphQLPlaygroundView.as_view()),
+    path("playground/", csrf_exempt(GraphQLPlaygroundView.as_view())),
 ]
 
